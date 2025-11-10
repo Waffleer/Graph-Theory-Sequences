@@ -1,5 +1,5 @@
 import copy
-
+import numpy as np
 
 
 class GraphReductionFailed(Exception):
@@ -8,28 +8,7 @@ class GraphReductionFailed(Exception):
         super().__init__(message)
         # Now for your custom code...
 
-
-# class Node:
-#     edges: list = []
-
-#     def __init__(self, name: str, edgelist: list):
-#         self.name = name
-#         self.edges = edgelist
-#         print(name)
-#         print(edgelist)
-#         for node in edgelist:
-#             print("node: " + node.name)
-#             node.edges.append(self)
-
-#     @property
-#     def degree(self):
-#         return len(self.edges)
-    
-#     def __str__(self):
-#         return f"{self.name}"
-    
 class Sequence:
-
 
     def __init__(self, sequence: list[int], name: str = ""):
         self.name = name
@@ -76,9 +55,7 @@ class Sequence:
         for x in arr:
             s = s + x
         return s
-    
 
-    
     def __formatSubset(self, arr: list[int]) -> str:
         ret = ""
         arr = str(arr)
@@ -121,11 +98,38 @@ class Sequence:
     
     def __str__(self):
         return f"{self.name} = {self.sequence}"
-        
 
-a = [10,10,7,7,7,7,4,5,2,1,2,2,5,1] # Is a graph
-b = [6,4,3,2,2,2,1] # Is a graph
 
-s = Sequence(b, name="s")
-print(s.is_graph)
+class Matrix:
+    
+
+    def __init__(self, size: int):
+        self.matrix = np.zeros((size, size),dtype=int)
+
+    def __eq__(self, value):
+        ...
+
+    def __str__(self) -> str:
+        return str(self.matrix)
+
+    def __getitem__(self, index):
+        return self.matrix[index]
+    
+    
+
+    
+
+
+a = Matrix(5)
+print(a[0])
+
+
+# a = [3,3,2,2,2,2] # Is a graph
+
+# s = Sequence(a, name="a")
+# s.matrix()
+
+
+
+
 
