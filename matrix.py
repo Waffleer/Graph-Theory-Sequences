@@ -2,6 +2,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import copy
 from itertools import combinations
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
@@ -158,3 +159,12 @@ G = nx.from_numpy_array(np.array(broken_adjacency_matrix[1]))
 nx.draw(G, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
 plt.title("Graph Visualization from Adjacency Matrix")
 plt.show()
+
+
+# with ThreadPoolExecutor(max_workers=3) as executor:
+#     # Submit tasks to the thread pool
+#     futures = [executor.submit(task, i) for i in range(5)]
+
+#     # Retrieve results as they complete
+#     for future in futures:
+#         print(future.result())
