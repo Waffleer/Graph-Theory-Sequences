@@ -2,10 +2,10 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import copy
 from itertools import combinations
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import math
 import numpy as np
-
+import itertools
 
 MAX_WORKERS = 2
 OBJECT_WORKERS = 10
@@ -41,6 +41,71 @@ def distribute_identical_objects(num_objects, buckets):
 
     return results
 
+# Chatgpt
+def remove_duplicates_recursive_gen_eq(data_gen: list["Matrix"], max_workers=4, min_chunk_size=100):
+    """
+    Recursively remove duplicates from a (possibly streaming) dataset
+    using equality (==) comparison and parallel processing.
+
+    Args:
+        data_gen (iterable or generator): Stream of objects.
+        max_workers (int): Number of parallel worker processes.
+        min_chunk_size (int): Smallest chunk size before recursion stops.
+
+    Returns:
+        list: Deduplicated list of unique objects.
+    """
+
+    def dedup_sequential(seq):
+        """Sequential deduplication using == comparison."""
+        unique = []
+        for item in seq:
+            if not any(item == u for u in unique):
+                unique.append(item)
+        return unique
+
+    def recursive_dedup(seq):
+        """Recursive deduplication logic."""
+        n = len(seq)
+        if n <= min_chunk_size:
+            return dedup_sequential(seq)
+
+        mid = n // 2
+        left, right = seq[:mid], seq[mid:]
+
+        # Parallel recursion for left and right halves
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            left_future = executor.submit(recursive_dedup, left)
+            right_future = executor.submit(recursive_dedup, right)
+            left_unique = left_future.result()
+            right_unique = right_future.result()
+
+        # Merge results and deduplicate again
+        merged = itertools.chain(left_unique, right_unique)
+        return dedup_sequential(list(merged))
+
+    def chunk_generator(gen, chunk_size):
+        """Yield successive chunks from a generator."""
+        chunk = []
+        for item in gen:
+            chunk.append(item)
+            if len(chunk) >= chunk_size:
+                yield chunk
+                chunk = []
+        if chunk:
+            yield chunk
+
+    # Split generator into top-level chunks
+    chunks = list(chunk_generator(data_gen, min_chunk_size * 4))
+
+    # Process each chunk recursively (possibly in parallel)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        partials = list(executor.map(recursive_dedup, chunks))
+
+    # Merge and deduplicate final results
+    combined = itertools.chain.from_iterable(partials)
+    return dedup_sequential(list(combined))
+
 
     # with ThreadPoolExecutor(max_workers=3) as executor:
     # # Submit tasks to the thread pool
@@ -52,7 +117,7 @@ def distribute_identical_objects(num_objects, buckets):
     #     print(future.result())
 
 
-def parse_sequence(s: list[str]) -> list[list[int]]:
+def parse_sequence_old(s: list[str]) -> list[list[int]]:
     results = []
     length = len(s)
 
@@ -163,22 +228,256 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
     return results
 
 
-s = [5,2,2,2,2,2,5,4,4,4] # 2565
-s.reverse()
+
+class Matrix():
+
+    sublist: list[list[int]]
+
+    matrix: list[list[int]]
+    sum_array: list[int]
+    current_sequence: list[int]
+
+    length: int
+    iter: int
+
+    @classmethod
+    def set_sublist(cls, sublist: list[list[int]]):
+        cls.sublist = sublist
+
+    def __init__(self, sequence: list[int]):
+        self.length = len(sequence)
+        self.sum_array = [0 for _ in range(self.length)]
+        self.current_sequence = sequence
+        self.matrix = []
+
+    def __update_sum_array(self, sequence: list[int]):
+        for column in range(self.iter, self.length): # This can be saved instead of compiled every time
+            self.sum_array[column] = self.sum_array[column] + sequence[column]
+
+    def update_matrix_array(self, new_sequence: list[int]):
+        s = copy.copy(self.current_sequence)
+        for i in range(self.iter+1, self.length):
+            s[i] = s[i] - new_sequence[i]
+        self.__update_sum_array(s)
+        self.matrix.append(s)
+        
+    @property
+    def iter(self):
+        return len(self.matrix)
+    
+    @property
+    def is_last(self):
+        if self.iter == self.length-1: 
+            return True
+        return False
+    
+    def __eq__(self, value: "Matrix") -> bool:
+
+        first_split: list[list[int]] = []
+        second_split: list[list[int]] = []
+
+        for l in self.sublist:
+            first_split.append(self.sum_array[l[0]:l[1]])
+
+        for l in self.sublist:
+            second_split.append(value.sum_array[l[0]:l[1]])
+
+        for split_num in range(0, len(first_split)):
+            first_split[split_num].sort()
+            second_split[split_num].sort()
+            for i in range(0, len(first_split[split_num])):
+                if first_split[split_num][i] != second_split[split_num][i]:
+                    return False
+        return True
+    
+    def __str__(self) -> str:
+        ret = ""
+        for row in range(0, len(self.matrix)):
+            ret = ret + f"{self.matrix[row]}"
+            if row != len(self.matrix)-1:
+                ret = ret + "\n"
+        return ret
+            
+
+
+def parse_sequence(s: list[str]) -> list[list[int]]:
+    start_matrix = Matrix(copy.copy(s))
+    length = len(s)
+    sublist = [[0,2],[2,6]]
+    start_matrix.set_sublist(sublist)
+
+    print(f"Starting Matrix {start_matrix.current_sequence}")
+
+    start = [start_matrix]
+    out = []
+
+
+    def parse_row(matrix: Matrix):
+        # Can optimize last iteration since it is deterministic
+        # print("")
+        # print(f"ITERATION {iter}")
+        # print(f"Buckets {sequence}")
+        # print(f"Matrix")
+        # for x in matrix:
+        #     print(x)
+        # print("- - - - - - -")
+
+        # Save value ( amount of edges ) of vertex
+        value = matrix.current_sequence[matrix.iter]
+        matrix.current_sequence[matrix.iter] = 0
+        
+        # # update_sum_array debug
+        # print("???")
+        # print(matrix.sum_array)
+        # print("+")
+        # print(matrix.last_row)
+        # print("=")
+        # print(matrix.sum_array)
+        # print("???")
+
+        # print(f"value {value}")
+        # print(f"sequence {sequence}")
+
+        combos = distribute_identical_objects(value, matrix.current_sequence)
+        #print(combos)
+
+        print(combos)
+
+
+        def test_graphical(iter: int, sequence: list[int]) -> bool:
+            non_zero_indexes = 0
+            for x in range(iter+1, length):
+                if sequence[x] != 0:
+                    non_zero_indexes = non_zero_indexes + 1
+            
+            if non_zero_indexes == 0: # n=0 is graphical
+                return True
+            for x in range(iter+1, length):
+                if sequence[x] > non_zero_indexes-1:
+                    return False
+            return True
+
+        # Remove non-graphical sequence columns
+        for row_num in range(0, len(combos)):
+            print(f"    Working on row {combos[row_num]}")
+            if test_graphical(matrix.iter, combos[row_num]):
+                print("    Is Graphical")
+                m = copy.deepcopy(matrix)
+                m.update_matrix_array(combos[row_num])
+                m.current_sequence = combos[row_num]
+                out.append(m)
+            else:
+                print("    Is not Graphical")
+        return
+
+        # def per_unique_row(row: list[int]):
+        #     m = copy.deepcopy(matrix)
+        #     sums_u = copy.deepcopy(sums)
+        #     m.append(row_to_matrix_row(iter, row))
+
+        #     if not is_last:
+        #         for column in range(iter+1, length): # This can be saved instead of compiled everytime
+        #             sums_u[column] = sums_u[column] + row[column]
+        #         parse_row(iter+1, row, m, sums_u)
+        #     else:
+        #         results.append(m)
+        #         return
+
+        # with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        #     futures = []
+        #     for row in unique_rows:
+        #         futures.append(executor.submit(per_unique_row, row))
+        #     for future in as_completed(futures):
+        #         future.result()
+        # executor.shutdown()
+
+
+    for i in range(0, length-1):
+        out: list[Matrix] = []
+        print(f"Working on node {i}")
+        print(f"Starting with {len(start)} matrixes")
+
+        for matrix in start:
+            parse_row(matrix)
+
+            
+                
+        print("All")
+        for m in range(0, len(out)):
+            print(f"Matrix {m}")
+            print(out[m])
+            print(f"sum_array: {out[m].sum_array}")
+            print(f"Current Sequence: {out[m].current_sequence}")
+        print("")
+
+        for x in range(0, len(out)):
+            for y in range(0, len(out)):
+                if x != y:
+                    print(f"M{x} M{y} {out[x] == out[y]}")
+
+        start = []
+        start = remove_duplicates_recursive_gen_eq(out)
+
+        print(f"{len(start)} Unique Matrixes")
+        for m in range(0, len(start)):
+            print(f"Matrix {m}")
+            print(start[m])
+
+        print("")
+
+
+
+    return start
+
+
+
+
+
+
+
+#s = [5,2,2,2,2,2,5,4,4,4] # 2565
+#s = [3,3,2,2,2] # 2
+s = [3,3,2,2,2,2] # 4
+#s = [3,3,2,2,2,2,2] # 9
+
 broken_adjacency_matrix = parse_sequence(s)
+for m in broken_adjacency_matrix:
+    print(m)
+    print("")
+
+print(f"{len(broken_adjacency_matrix)} unique matrixes for s={s}")
 
 
-# for unique in broken_adjacency_matrix:
-#     for row in unique:
+
+# for unique in range(len(broken_adjacency_matrix)):
+#     print("Graph " + str(unique+1))
+#     for row in broken_adjacency_matrix[unique]:
 #         print(row)
 #     print("")
+# print("- - - - - - ")
 
-print(len(broken_adjacency_matrix))
+# print(len(broken_adjacency_matrix))
 
+# matrix = []
+# for x in broken_adjacency_matrix:
+#     matrix.append(nx.from_numpy_array(np.array(x)))
+# # nx.draw(a, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
+# # nx.draw(b, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
+# # nx.draw(c, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
+# # nx.draw(d, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
+# # nx.draw(e, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
+# # plt.title("Graph Visualization from Adjacency Matrix")
+# # plt.show()
 
+# fig, axes = plt.subplots(3, 4, figsize=(10, 5)) # 1 row, 2 columns
+# axes = axes.flatten()
 
+# # Draw G1 on the first subplot
+# for i, G in enumerate(matrix):
+#     ax = axes[i]
+#     pos = nx.spring_layout(G) # Choose a layout algorithm
+#     nx.draw(G, pos, ax=ax, with_labels=True, node_color='skyblue', node_size=700, font_size=8)
+#     ax.set_title(f"Graph {i+1}") # Optional: set a title for each subplot
 
-# G = nx.from_numpy_array(np.array(broken_adjacency_matrix[1]))
-# nx.draw(G, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
-# plt.title("Graph Visualization from Adjacency Matrix")
+# plt.tight_layout() # Adjust layout to prevent overlap
 # plt.show()
