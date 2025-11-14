@@ -231,7 +231,8 @@ def parse_sequence_old(s: list[str]) -> list[list[int]]:
 
 class Matrix():
 
-    sublist: list[list[int]]
+    initial_sequence: list[int]
+    zero_row: list[int]
 
     matrix: list[list[int]]
     sum_array: list[int]
@@ -241,12 +242,17 @@ class Matrix():
     iter: int
 
     @classmethod
-    def set_sublist(cls, sublist: list[list[int]]):
-        cls.sublist = sublist
+    def set_initial_sequence(cls, initial_sequence: list[int]):
+        cls.initial_sequence = initial_sequence
+
+    @classmethod
+    def set_zero_row(cls, zero_row: list[int]):
+        cls.zero_row = zero_row
 
     def __init__(self, sequence: list[int]):
         self.length = len(sequence)
         self.sum_array = [0 for _ in range(self.length)]
+        self.set_zero_row(self.sum_array) # Sets zero_row to list of zeros
         self.current_sequence = sequence
         self.matrix = []
 
@@ -273,22 +279,50 @@ class Matrix():
     
     def __eq__(self, value: "Matrix") -> bool:
 
-        first_split: list[list[int]] = []
-        second_split: list[list[int]] = []
+        # first_split: list[list[int]] = []
+        # second_split: list[list[int]] = []
 
-        for l in self.sublist:
-            first_split.append(self.sum_array[l[0]:l[1]])
+        # for l in self.sublist:
+        #     first_split.append(self.sum_array[l[0]:l[1]])
 
-        for l in self.sublist:
-            second_split.append(value.sum_array[l[0]:l[1]])
+        # for l in self.sublist:
+        #     second_split.append(value.sum_array[l[0]:l[1]])
 
-        for split_num in range(0, len(first_split)):
-            first_split[split_num].sort()
-            second_split[split_num].sort()
-            for i in range(0, len(first_split[split_num])):
-                if first_split[split_num][i] != second_split[split_num][i]:
-                    return False
-        return True
+        # for split_num in range(0, len(first_split)):
+        #     first_split[split_num].sort()
+        #     second_split[split_num].sort()
+        #     for i in range(0, len(first_split[split_num])):
+        #         if first_split[split_num][i] != second_split[split_num][i]:
+        #             return False
+
+        # a_cs = copy.copy(self.current_sequence)
+        # b_cs = copy.copy(value.current_sequence)
+        # a_cs.sort()
+        # b_cs.sort()
+        # for i in range(self.iter, self.length):
+        #     if a_cs[i] != b_cs[i]:
+        #         return False
+
+
+        a = copy.deepcopy(self.matrix)
+        b = copy.deepcopy(value.matrix)
+
+        # Squaring the matrixs
+        for x in range(self.iter, self.length):
+            a.append(self.zero_row)
+            b.append(self.zero_row)
+
+        G1 = nx.from_numpy_array(np.array(a))
+        G2 = nx.from_numpy_array(np.array(b))
+
+        for i in range(len(self.initial_sequence)):
+            G1.nodes[i]['weight'] = self.initial_sequence[i]
+            G2.nodes[i]['weight'] = self.initial_sequence[i]
+
+        def node_match(n1, n2):
+            return n1['weight'] == n2['weight']
+
+        return nx.is_isomorphic(G1, G2, node_match=node_match)
     
     def __str__(self) -> str:
         ret = ""
@@ -303,8 +337,7 @@ class Matrix():
 def parse_sequence(s: list[str]) -> list[list[int]]:
     start_matrix = Matrix(copy.copy(s))
     length = len(s)
-    sublist = [[0,2],[2,6]]
-    start_matrix.set_sublist(sublist)
+    start_matrix.set_initial_sequence(copy.copy(s))
 
     print(f"Starting Matrix {start_matrix.current_sequence}")
 
@@ -426,7 +459,8 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
         print("")
 
 
-
+    for x in start: # adding final zero row
+        x.matrix.append(x.zero_row)
     return start
 
 
@@ -437,9 +471,13 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
 
 #s = [5,2,2,2,2,2,5,4,4,4] # 2565
 #s = [3,3,2,2,2] # 2
-s = [3,3,2,2,2,2] # 4
-#s = [3,3,2,2,2,2,2] # 9
-
+#s = [3,3,2,2,2,2] # 4
+#s = [3,3,2,2,2,2,2] # 7
+#s = [4, 3, 2, 2, 1, 1, 1] # 7
+#s = [2, 2, 2, 2, 2, 1, 1]
+#s = [4, 4, 2, 2, 2, 1, 1] # we get 4 website says 5, cant manually find a 5th
+#s = [4, 3, 2, 2, 2, 1] # website said 4 we get 3
+s = [3, 2, 2, 2, 2, 1]
 broken_adjacency_matrix = parse_sequence(s)
 for m in broken_adjacency_matrix:
     print(m)
@@ -458,9 +496,10 @@ print(f"{len(broken_adjacency_matrix)} unique matrixes for s={s}")
 
 # print(len(broken_adjacency_matrix))
 
-# matrix = []
-# for x in broken_adjacency_matrix:
-#     matrix.append(nx.from_numpy_array(np.array(x)))
+matrix = []
+x: Matrix
+for x in broken_adjacency_matrix:
+    matrix.append(nx.from_numpy_array(np.array(x.matrix)))
 # # nx.draw(a, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
 # # nx.draw(b, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
 # # nx.draw(c, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
@@ -469,15 +508,16 @@ print(f"{len(broken_adjacency_matrix)} unique matrixes for s={s}")
 # # plt.title("Graph Visualization from Adjacency Matrix")
 # # plt.show()
 
-# fig, axes = plt.subplots(3, 4, figsize=(10, 5)) # 1 row, 2 columns
-# axes = axes.flatten()
+fig, axes = plt.subplots(2, 3, figsize=(10, 5)) # 1 row, 2 columns
+axes = axes.flatten()
 
-# # Draw G1 on the first subplot
-# for i, G in enumerate(matrix):
-#     ax = axes[i]
-#     pos = nx.spring_layout(G) # Choose a layout algorithm
-#     nx.draw(G, pos, ax=ax, with_labels=True, node_color='skyblue', node_size=700, font_size=8)
-#     ax.set_title(f"Graph {i+1}") # Optional: set a title for each subplot
+# Draw G1 on the first subplot
+for i, G in enumerate(matrix):
+    ax = axes[i]
+    pos = nx.spring_layout(G) # Choose a layout algorithm
+    nx.draw(G, pos, ax=ax, with_labels=True, node_color='skyblue', node_size=700, font_size=8)
+    ax.set_title(f"Graph {i+1}") # Optional: set a title for each subplot
 
-# plt.tight_layout() # Adjust layout to prevent overlap
-# plt.show()
+plt.tight_layout() # Adjust layout to prevent overlap
+plt.show()
+
