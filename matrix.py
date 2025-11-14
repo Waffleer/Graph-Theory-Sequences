@@ -515,7 +515,7 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
 import csv
 
 sequences = []
-with open("data/test_data_8.csv", newline="") as f:
+with open("data/test_data_11.csv", newline="") as f:
     reader = csv.DictReader(f)
     for row in reader:
         sequence = str(row["sequence"]).split(" ")
@@ -525,10 +525,10 @@ with open("data/test_data_8.csv", newline="") as f:
         sequences.append([sequence, value])
 
 total_sequence = len(sequences)
-for sequence in range(0, total_sequence):
+for sequence in range(0, 100):
     s = sequences[sequence][0]
     value = sequences[sequence][1]
-    print(f"{sequence}/{total_sequence} Working on sequence {s} with target value {value} | ", end = "")
+    print(f"{sequence+1}/{total_sequence} Working on sequence {s} with target value {value} | ", end = "")
     result = parse_sequence(s)
     total_matrices = len(result)
     print(f"Got {total_matrices}")
