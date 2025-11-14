@@ -7,7 +7,7 @@ import math
 import numpy as np
 import itertools
 
-MAX_WORKERS = 2
+MAX_WORKERS = 10
 OBJECT_WORKERS = 10
 
 def per_combo_worker(combo_state):
@@ -339,7 +339,7 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
     length = len(s)
     start_matrix.set_initial_sequence(copy.copy(s))
 
-    print(f"Starting Matrix {start_matrix.current_sequence}")
+    #print(f"Starting Matrix {start_matrix.current_sequence}")
 
     start = [start_matrix]
     out = []
@@ -374,7 +374,7 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
         combos = distribute_identical_objects(value, matrix.current_sequence)
         #print(combos)
 
-        print(combos)
+        #print(combos)
 
 
         def test_graphical(iter: int, sequence: list[int]) -> bool:
@@ -389,18 +389,35 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
                 if sequence[x] > non_zero_indexes-1:
                     return False
             return True
-
-        # Remove non-graphical sequence columns
-        for row_num in range(0, len(combos)):
-            print(f"    Working on row {combos[row_num]}")
-            if test_graphical(matrix.iter, combos[row_num]):
-                print("    Is Graphical")
+        
+        def parse_combo(combo):
+            if test_graphical(matrix.iter, combo):
+                # print("    Is Graphical")
                 m = copy.deepcopy(matrix)
-                m.update_matrix_array(combos[row_num])
-                m.current_sequence = combos[row_num]
+                m.update_matrix_array(combo)
+                m.current_sequence = combo
                 out.append(m)
-            else:
-                print("    Is not Graphical")
+
+        futures = []
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = []
+            for row in range(0, len(combos)):
+                futures.append(executor.submit(parse_combo, combos[row]))
+            for future in as_completed(futures):
+                future.result()
+        executor.shutdown()
+
+        # # Remove non-graphical sequence columns
+        # for row_num in range(0, len(combos)):
+        #     # print(f"    Working on row {combos[row_num]}")
+        #     if test_graphical(matrix.iter, combos[row_num]):
+        #         # print("    Is Graphical")
+        #         m = copy.deepcopy(matrix)
+        #         m.update_matrix_array(combos[row_num])
+        #         m.current_sequence = combos[row_num]
+        #         out.append(m)
+            # else:
+            #     print("    Is not Graphical")
         return
 
         # def per_unique_row(row: list[int]):
@@ -427,36 +444,46 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
 
     for i in range(0, length-1):
         out: list[Matrix] = []
-        print(f"Working on node {i}")
-        print(f"Starting with {len(start)} matrixes")
+        # print(f"Working on node {i}")
+        # print(f"Starting with {len(start)} matrixes")
 
-        for matrix in start:
-            parse_row(matrix)
+
+        futures = []
+        with ThreadPoolExecutor(max_workers=100) as executor:
+            futures = []
+            for matrix in start:
+                futures.append(executor.submit(parse_row, matrix))
+            for future in as_completed(futures):
+                future.result()
+        executor.shutdown()
+
+        # for matrix in start:
+        #     parse_row(matrix)
 
             
                 
-        print("All")
-        for m in range(0, len(out)):
-            print(f"Matrix {m}")
-            print(out[m])
-            print(f"sum_array: {out[m].sum_array}")
-            print(f"Current Sequence: {out[m].current_sequence}")
-        print("")
+        # print("All")
+        # for m in range(0, len(out)):
+        #     print(f"Matrix {m}")
+        #     print(out[m])
+        #     print(f"sum_array: {out[m].sum_array}")
+        #     print(f"Current Sequence: {out[m].current_sequence}")
+        # print("")
 
-        for x in range(0, len(out)):
-            for y in range(0, len(out)):
-                if x != y:
-                    print(f"M{x} M{y} {out[x] == out[y]}")
+        # for x in range(0, len(out)):
+        #     for y in range(0, len(out)):
+        #         if x != y:
+        #             print(f"M{x} M{y} {out[x] == out[y]}")
 
         start = []
         start = remove_duplicates_recursive_gen_eq(out)
 
-        print(f"{len(start)} Unique Matrixes")
-        for m in range(0, len(start)):
-            print(f"Matrix {m}")
-            print(start[m])
+        # print(f"{len(start)} Unique Matrixes")
+        # for m in range(0, len(start)):
+        #     print(f"Matrix {m}")
+        #     print(start[m])
 
-        print("")
+        # print("")
 
 
     for x in start: # adding final zero row
@@ -477,13 +504,39 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
 #s = [2, 2, 2, 2, 2, 1, 1]
 #s = [4, 4, 2, 2, 2, 1, 1] # we get 4 website says 5, cant manually find a 5th
 #s = [4, 3, 2, 2, 2, 1] # website said 4 we get 3
-s = [3, 2, 2, 2, 2, 1]
-broken_adjacency_matrix = parse_sequence(s)
-for m in broken_adjacency_matrix:
-    print(m)
-    print("")
+# s = [3, 2, 2, 2, 2, 1]
+# broken_adjacency_matrix = parse_sequence(s)
+# for m in broken_adjacency_matrix:
+#     print(m)
+#     print("")
 
-print(f"{len(broken_adjacency_matrix)} unique matrixes for s={s}")
+# print(f"{len(broken_adjacency_matrix)} unique matrixes for s={s}")
+
+import csv
+
+sequences = []
+with open("data/test_data_8.csv", newline="") as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        sequence = str(row["sequence"]).split(" ")
+        for i in range(0, len(sequence)):
+            sequence[i] = int(sequence[i])
+        value = int(row["value"])
+        sequences.append([sequence, value])
+
+total_sequence = len(sequences)
+for sequence in range(0, total_sequence):
+    s = sequences[sequence][0]
+    value = sequences[sequence][1]
+    print(f"{sequence}/{total_sequence} Working on sequence {s} with target value {value} | ", end = "")
+    result = parse_sequence(s)
+    total_matrices = len(result)
+    print(f"Got {total_matrices}")
+    if total_matrices != value:
+        print("    Failed test.\n")
+        break
+    
+
 
 
 
@@ -496,28 +549,28 @@ print(f"{len(broken_adjacency_matrix)} unique matrixes for s={s}")
 
 # print(len(broken_adjacency_matrix))
 
-matrix = []
-x: Matrix
-for x in broken_adjacency_matrix:
-    matrix.append(nx.from_numpy_array(np.array(x.matrix)))
-# # nx.draw(a, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
-# # nx.draw(b, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
-# # nx.draw(c, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
-# # nx.draw(d, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
-# # nx.draw(e, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
-# # plt.title("Graph Visualization from Adjacency Matrix")
-# # plt.show()
+# matrix = []
+# x: Matrix
+# for x in broken_adjacency_matrix:
+#     matrix.append(nx.from_numpy_array(np.array(x.matrix)))
+# # # nx.draw(a, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
+# # # nx.draw(b, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
+# # # nx.draw(c, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
+# # # nx.draw(d, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
+# # # nx.draw(e, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
+# # # plt.title("Graph Visualization from Adjacency Matrix")
+# # # plt.show()
 
-fig, axes = plt.subplots(2, 3, figsize=(10, 5)) # 1 row, 2 columns
-axes = axes.flatten()
+# fig, axes = plt.subplots(2, 3, figsize=(10, 5)) # 1 row, 2 columns
+# axes = axes.flatten()
 
-# Draw G1 on the first subplot
-for i, G in enumerate(matrix):
-    ax = axes[i]
-    pos = nx.spring_layout(G) # Choose a layout algorithm
-    nx.draw(G, pos, ax=ax, with_labels=True, node_color='skyblue', node_size=700, font_size=8)
-    ax.set_title(f"Graph {i+1}") # Optional: set a title for each subplot
+# # Draw G1 on the first subplot
+# for i, G in enumerate(matrix):
+#     ax = axes[i]
+#     pos = nx.spring_layout(G) # Choose a layout algorithm
+#     nx.draw(G, pos, ax=ax, with_labels=True, node_color='skyblue', node_size=700, font_size=8)
+#     ax.set_title(f"Graph {i+1}") # Optional: set a title for each subplot
 
-plt.tight_layout() # Adjust layout to prevent overlap
-plt.show()
+# plt.tight_layout() # Adjust layout to prevent overlap
+# plt.show()
 
