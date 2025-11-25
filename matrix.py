@@ -267,6 +267,7 @@ for x in data_lists:
             value = int(row["value"])
             sequences.append([sequence, value])
 
+sequences = tuple(sequences)
 total_sequence = len(sequences)
 
 failed = []
@@ -301,8 +302,6 @@ print(f"Took {total_end-total_start} seconds")
 if len(failed) > 0:
     for x in failed:
         print(x)
-else:
-    print("No Sequences failed")
 
 # print("Solved adjacency Matrix")
 # print([0,1,1,1,0])
@@ -321,10 +320,10 @@ else:
 
 # print(len(broken_adjacency_matrix))
 
-matrix = []
-x: Matrix
-for x in broken_adjacency_matrix:
-    matrix.append(nx.from_numpy_array(np.array(x.matrix)))
+# matrix = []
+# x: Matrix
+# for x in broken_adjacency_matrix:
+#     matrix.append(nx.from_numpy_array(np.array(x.matrix)))
 # # # nx.draw(a, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
 # # # nx.draw(b, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
 # # # nx.draw(c, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
@@ -333,16 +332,16 @@ for x in broken_adjacency_matrix:
 # # # plt.title("Graph Visualization from Adjacency Matrix")
 # # # plt.show()
 
-fig, axes = plt.subplots(2, 3, figsize=(10, 5)) # 1 row, 2 columns
-axes = axes.flatten()
+# fig, axes = plt.subplots(2, 3, figsize=(10, 5)) # 1 row, 2 columns
+# axes = axes.flatten()
 
-# Draw G1 on the first subplot
-for i, G in enumerate(matrix):
-    ax = axes[i]
-    pos = nx.spring_layout(G) # Choose a layout algorithm
-    nx.draw(G, pos, ax=ax, with_labels=True, node_color='skyblue', node_size=700, font_size=8)
-    ax.set_title(f"Graph {i+1}") # Optional: set a title for each subplot
+# # Draw G1 on the first subplot
+# for i, G in enumerate(matrix):
+#     ax = axes[i]
+#     pos = nx.spring_layout(G) # Choose a layout algorithm
+#     nx.draw(G, pos, ax=ax, with_labels=True, node_color='skyblue', node_size=700, font_size=8)
+#     ax.set_title(f"Graph {i+1}") # Optional: set a title for each subplot
 
-plt.tight_layout() # Adjust layout to prevent overlap
-plt.show()
+# plt.tight_layout() # Adjust layout to prevent overlap
+# plt.show()
 
