@@ -9,7 +9,7 @@ import itertools
 import time
 
 MAX_WORKERS = 10
-OBJECT_WORKERS = 5
+OBJECT_WORKERS = 10
 
 def per_combo_worker(combo_state):
     combo, state = combo_state
@@ -117,7 +117,121 @@ def remove_duplicates_recursive_gen_eq(data_gen: list["Matrix"], max_workers=4, 
     # for future in futures:
     #     print(future.result())
 
+
+def parse_sequence_old(s: list[str]) -> list[list[int]]:
+    results = []
+    length = len(s)
+
+    # Start off recursion
+
+    sums = []
+    for x in range(0, length):
+        sums.append(0)
+    
+    extra_row = copy.deepcopy(sums)
+
+    def parse_row(iter: int, sequence: list[int], matrix: list[list[int]], sums: list[int]):
+        print(iter)
+        # Can optimize last iteration since it is deterministic
+        # print("")
+        # print(f"ITERATION {iter}")
+        # print(f"Buckets {sequence}")
+        # print(f"Matrix")
+        # for x in matrix:
+        #     print(x)
+        # print("- - - - - - -")
+        if iter == length-1: is_last = True; # We want to stop before the last iteration
+        else: is_last = False
+
+        # Save value ( amount of edges ) of vertex
+        value = sequence[iter]
+        sequence[iter] = 0
+
+        # print(f"value {value}")
+        # print(f"sequence {sequence}")
+
+        combos = distribute_identical_objects(value, sequence)
+
+        #print(combos)
+
+        def compare_sequences(iter: int, first: list[int], second: list[int]) -> bool:
+            a = copy.deepcopy(first)
+            b = copy.deepcopy(second)
+            for column in range(iter+1, length): # This can be saved instead of compiled everytime
+                a[column] = sums[column] + a[column]
+
+            for column in range(iter+1, length):
+                b[column] = sums[column] + b[column]
+
+            a.sort() # We need the different amount of each value to be different
+            b.sort()
+            for i in range(iter+1, length):
+                if a[i] != b[i]:
+                    return True
+            return False
+        
+        def row_to_matrix_row(iter: int, row: list[int]) -> list[int]:
+            matrix = copy.deepcopy(sequence)
+            for i in range(iter+1, length):
+                matrix[i] = matrix[i] - row[i]
+            return matrix
+
+        def test_graphical(iter: int, sequence: list[int]) -> bool:
+            non_zero_indexs = 0
+            for x in range(iter+1, length):
+                if sequence[x] != 0:
+                    non_zero_indexs = non_zero_indexs + 1
+            if non_zero_indexs == 0: # n=0 is graphical
+                return True
+            for x in range(iter+1, length):
+                if sequence[x] > non_zero_indexs-1:
+                    return False
+            return True
+
+        unique_rows = []
+
+        # Remove duplicate columns
+        for row_num in range(0, len(combos)):
+            failed = False
+            if len(unique_rows) == 0:
+                if test_graphical(iter, combos[row_num]):
+                    unique_rows.append(combos[row_num])
+            else:
+                for unique in unique_rows:
+                    if not compare_sequences(iter, combos[row_num], unique) or not test_graphical(iter, combos[row_num]):
+                        failed = True
+                        break
+                if not failed:
+                    unique_rows.append(combos[row_num])
+
+        def per_unique_row(row: list[int]):
+            m = copy.deepcopy(matrix)
+            sums_u = copy.deepcopy(sums)
+            m.append(row_to_matrix_row(iter, row))
+
+            if not is_last:
+                for column in range(iter+1, length): # This can be saved instead of compiled everytime
+                    sums_u[column] = sums_u[column] + row[column]
+                parse_row(iter+1, row, m, sums_u)
+            else:
+                results.append(m)
+                return
+
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = []
+            for row in unique_rows:
+                futures.append(executor.submit(per_unique_row, row))
+            for future in as_completed(futures):
+                future.result()
+        
+
+    parse_row(0, s, [], sums)
+    return results
+
+
+
 class Matrix():
+
     initial_sequence: list[int]
     zero_row: list[int]
 
@@ -164,6 +278,32 @@ class Matrix():
         return False
     
     def __eq__(self, value: "Matrix") -> bool:
+
+        # first_split: list[list[int]] = []
+        # second_split: list[list[int]] = []
+
+        # for l in self.sublist:
+        #     first_split.append(self.sum_array[l[0]:l[1]])
+
+        # for l in self.sublist:
+        #     second_split.append(value.sum_array[l[0]:l[1]])
+
+        # for split_num in range(0, len(first_split)):
+        #     first_split[split_num].sort()
+        #     second_split[split_num].sort()
+        #     for i in range(0, len(first_split[split_num])):
+        #         if first_split[split_num][i] != second_split[split_num][i]:
+        #             return False
+
+        # a_cs = copy.copy(self.current_sequence)
+        # b_cs = copy.copy(value.current_sequence)
+        # a_cs.sort()
+        # b_cs.sort()
+        # for i in range(self.iter, self.length):
+        #     if a_cs[i] != b_cs[i]:
+        #         return False
+
+
         a = copy.deepcopy(self.matrix)
         b = copy.deepcopy(value.matrix)
 
@@ -199,15 +339,43 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
     length = len(s)
     start_matrix.set_initial_sequence(copy.copy(s))
 
+    #print(f"Starting Matrix {start_matrix.current_sequence}")
+
     start = [start_matrix]
     out = []
 
-    # This function is run per input matrix and returns every possible row
+
     def parse_row(matrix: Matrix):
+        # Can optimize last iteration since it is deterministic
+        # print("")
+        # print(f"ITERATION {iter}")
+        # print(f"Buckets {sequence}")
+        # print(f"Matrix")
+        # for x in matrix:
+        #     print(x)
+        # print("- - - - - - -")
+
+        # Save value ( amount of edges ) of vertex
         value = matrix.current_sequence[matrix.iter]
         matrix.current_sequence[matrix.iter] = 0
+        
+        # # update_sum_array debug
+        # print("???")
+        # print(matrix.sum_array)
+        # print("+")
+        # print(matrix.last_row)
+        # print("=")
+        # print(matrix.sum_array)
+        # print("???")
+
+        # print(f"value {value}")
+        # print(f"sequence {sequence}")
 
         combos = distribute_identical_objects(value, matrix.current_sequence)
+        #print(combos)
+
+        #print(combos)
+
 
         def test_graphical(iter: int, sequence: list[int]) -> bool:
             non_zero_indexes = 0
@@ -239,10 +407,48 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
                 futures.append(executor.submit(parse_combo, combos[row]))
             for future in as_completed(futures):
                 future.result()
+        
+
+        # # Remove non-graphical sequence columns
+        # for row_num in range(0, len(combos)):
+        #     # print(f"    Working on row {combos[row_num]}")
+        #     if test_graphical(matrix.iter, combos[row_num]):
+        #         # print("    Is Graphical")
+        #         m = copy.deepcopy(matrix)
+        #         m.update_matrix_array(combos[row_num])
+        #         m.current_sequence = combos[row_num]
+        #         out.append(m)
+            # else:
+            #     print("    Is not Graphical")
         return
+
+        # def per_unique_row(row: list[int]):
+        #     m = copy.deepcopy(matrix)
+        #     sums_u = copy.deepcopy(sums)
+        #     m.append(row_to_matrix_row(iter, row))
+
+        #     if not is_last:
+        #         for column in range(iter+1, length): # This can be saved instead of compiled everytime
+        #             sums_u[column] = sums_u[column] + row[column]
+        #         parse_row(iter+1, row, m, sums_u)
+        #     else:
+        #         results.append(m)
+        #         return
+
+        # with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        #     futures = []
+        #     for row in unique_rows:
+        #         futures.append(executor.submit(per_unique_row, row))
+        #     for future in as_completed(futures):
+        #         future.result()
+        # 
+
 
     for i in range(0, length-1):
         out: list[Matrix] = []
+        # print(f"Working on node {i}")
+        # print(f"Starting with {len(start)} matrixes")
+
 
         futures = []
         with ThreadPoolExecutor(max_workers=100) as executor:
@@ -251,20 +457,67 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
                 futures.append(executor.submit(parse_row, matrix))
             for future in as_completed(futures):
                 future.result()
+        
+
+        # for matrix in start:
+        #     parse_row(matrix)
+
+            
+                
+        # print("All")
+        # for m in range(0, len(out)):
+        #     print(f"Matrix {m}")
+        #     print(out[m])
+        #     print(f"sum_array: {out[m].sum_array}")
+        #     print(f"Current Sequence: {out[m].current_sequence}")
+        # print("")
+
+        # for x in range(0, len(out)):
+        #     for y in range(0, len(out)):
+        #         if x != y:
+        #             print(f"M{x} M{y} {out[x] == out[y]}")
 
         start = []
         start = remove_duplicates_recursive_gen_eq(out)
+
+        # print(f"{len(start)} Unique Matrixes")
+        # for m in range(0, len(start)):
+        #     print(f"Matrix {m}")
+        #     print(start[m])
+
+        # print("")
+
 
     for x in start: # adding final zero row
         x.matrix.append(x.zero_row)
     return start
 
 
+
+
+
+
+
+#s = [5,2,2,2,2,2,5,4,4,4] # 2565
+#s = [3,3,2,2,2] # 2
+#s = [3,3,2,2,2,2] # 4
+#s = [3,3,2,2,2,2,2] # 7
+#s = [4, 3, 2, 2, 1, 1, 1] # 7
+#s = [2, 2, 2, 2, 2, 1, 1]
+#s = [4, 4, 2, 2, 2, 1, 1] # we get 4 website says 5, cant manually find a 5th
+#s = [4, 3, 2, 2, 2, 1] # website said 4 we get 3
+# s = [3, 2, 2, 2, 2, 1]
+# broken_adjacency_matrix = parse_sequence(s)
+# for m in broken_adjacency_matrix:
+#     print(m)
+#     print("")
+
+# print(f"{len(broken_adjacency_matrix)} unique matrixes for s={s}")
+
 import csv
 
 sequences = []
-data_lists = ["data/test_data_9.csv"]
-#data_lists = ["data/test_data_example.csv"]
+data_lists = ["data/test_data.csv","data/test_data_8.csv"]
 for x in data_lists:
     with open(x, newline="") as f:
         reader = csv.DictReader(f)
@@ -276,10 +529,18 @@ for x in data_lists:
             sequences.append([sequence, value])
 
 total_sequence = len(sequences)
+# for sequence in range(0, total_sequence):
+#     s = sequences[sequence][0]
+#     value = sequences[sequence][1]
+#     print(f"{sequence+1}/{total_sequence} Working on sequence {s} with target value {value} | ", end = "")
+#     result = parse_sequence(s)
+#     total_matrices = len(result)
+#     print(f"Got {total_matrices}")
+#     if total_matrices != value:
+#         print("    Failed test.\n")
+#         break
 
 failed = []
-
-broken_adjacency_matrix = []
 
 def per_sequence(idx):
     s = sequences[idx][0]
@@ -290,11 +551,6 @@ def per_sequence(idx):
     total_matrices = len(result)
     elapsed_ms = (end - start) * 1000
     print(f"{idx+1}/{total_sequence} n={len(s)} Sequence {s} with target value {value} | Got {total_matrices} | Time: {elapsed_ms:.3f} ms")
-    # print("Broken Adjacency Matrix")
-    # print(result[0])
-    # print("")
-    # for x in result:
-    #     broken_adjacency_matrix.append(x)
     if total_matrices != value:
         print("    Failed test.\n")
         failed.append(f"{s} | {value} | {total_matrices}")
@@ -311,12 +567,9 @@ with ThreadPoolExecutor(max_workers=100) as executor:
 total_end = time.perf_counter()
 print(f"Took {total_end-total_start} seconds")
 
-# print("Solved adjacency Matrix")
-# print([0,1,1,1,0])
-# print([1,0,1,0,1])
-# print([1,1,0,0,0])
-# print([1,0,0,0,1])
-# print([0,1,0,1,0])
+    
+
+
 
 
 # for unique in range(len(broken_adjacency_matrix)):
@@ -328,10 +581,10 @@ print(f"Took {total_end-total_start} seconds")
 
 # print(len(broken_adjacency_matrix))
 
-matrix = []
-x: Matrix
-for x in broken_adjacency_matrix:
-    matrix.append(nx.from_numpy_array(np.array(x.matrix)))
+# matrix = []
+# x: Matrix
+# for x in broken_adjacency_matrix:
+#     matrix.append(nx.from_numpy_array(np.array(x.matrix)))
 # # # nx.draw(a, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
 # # # nx.draw(b, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
 # # # nx.draw(c, with_labels=True, node_color='skyblue', node_size=1000, font_size=12, font_weight='bold')
@@ -340,16 +593,16 @@ for x in broken_adjacency_matrix:
 # # # plt.title("Graph Visualization from Adjacency Matrix")
 # # # plt.show()
 
-fig, axes = plt.subplots(2, 3, figsize=(10, 5)) # 1 row, 2 columns
-axes = axes.flatten()
+# fig, axes = plt.subplots(2, 3, figsize=(10, 5)) # 1 row, 2 columns
+# axes = axes.flatten()
 
-# Draw G1 on the first subplot
-for i, G in enumerate(matrix):
-    ax = axes[i]
-    pos = nx.spring_layout(G) # Choose a layout algorithm
-    nx.draw(G, pos, ax=ax, with_labels=True, node_color='skyblue', node_size=700, font_size=8)
-    ax.set_title(f"Graph {i+1}") # Optional: set a title for each subplot
+# # Draw G1 on the first subplot
+# for i, G in enumerate(matrix):
+#     ax = axes[i]
+#     pos = nx.spring_layout(G) # Choose a layout algorithm
+#     nx.draw(G, pos, ax=ax, with_labels=True, node_color='skyblue', node_size=700, font_size=8)
+#     ax.set_title(f"Graph {i+1}") # Optional: set a title for each subplot
 
-plt.tight_layout() # Adjust layout to prevent overlap
-plt.show()
+# plt.tight_layout() # Adjust layout to prevent overlap
+# plt.show()
 
