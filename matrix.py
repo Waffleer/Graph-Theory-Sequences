@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import math
 import numpy as np
 import itertools
+import time
 
 MAX_WORKERS = 10
 OBJECT_WORKERS = 10
@@ -222,7 +223,7 @@ def parse_sequence_old(s: list[str]) -> list[list[int]]:
                 futures.append(executor.submit(per_unique_row, row))
             for future in as_completed(futures):
                 future.result()
-        executor.shutdown()
+        
 
     parse_row(0, s, [], sums)
     return results
@@ -241,13 +242,12 @@ class Matrix():
     length: int
     iter: int
 
-    @classmethod
-    def set_initial_sequence(cls, initial_sequence: list[int]):
-        cls.initial_sequence = initial_sequence
+    
+    def set_initial_sequence(self, initial_sequence: list[int]):
+        self.initial_sequence = initial_sequence
 
-    @classmethod
-    def set_zero_row(cls, zero_row: list[int]):
-        cls.zero_row = zero_row
+    def set_zero_row(self, zero_row: list[int]):
+        self.zero_row = zero_row
 
     def __init__(self, sequence: list[int]):
         self.length = len(sequence)
@@ -394,6 +394,8 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
             if test_graphical(matrix.iter, combo):
                 # print("    Is Graphical")
                 m = copy.deepcopy(matrix)
+                m.set_initial_sequence(matrix.initial_sequence)
+                m.set_zero_row(matrix.zero_row)
                 m.update_matrix_array(combo)
                 m.current_sequence = combo
                 out.append(m)
@@ -405,7 +407,7 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
                 futures.append(executor.submit(parse_combo, combos[row]))
             for future in as_completed(futures):
                 future.result()
-        executor.shutdown()
+        
 
         # # Remove non-graphical sequence columns
         # for row_num in range(0, len(combos)):
@@ -439,7 +441,7 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
         #         futures.append(executor.submit(per_unique_row, row))
         #     for future in as_completed(futures):
         #         future.result()
-        # executor.shutdown()
+        # 
 
 
     for i in range(0, length-1):
@@ -455,7 +457,7 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
                 futures.append(executor.submit(parse_row, matrix))
             for future in as_completed(futures):
                 future.result()
-        executor.shutdown()
+        
 
         # for matrix in start:
         #     parse_row(matrix)
@@ -515,26 +517,56 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
 import csv
 
 sequences = []
-with open("data/test_data_11.csv", newline="") as f:
-    reader = csv.DictReader(f)
-    for row in reader:
-        sequence = str(row["sequence"]).split(" ")
-        for i in range(0, len(sequence)):
-            sequence[i] = int(sequence[i])
-        value = int(row["value"])
-        sequences.append([sequence, value])
+data_lists = ["data/test_data.csv","data/test_data_8.csv"]
+for x in data_lists:
+    with open(x, newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            sequence = str(row["sequence"]).split(" ")
+            for i in range(0, len(sequence)):
+                sequence[i] = int(sequence[i])
+            value = int(row["value"])
+            sequences.append([sequence, value])
 
 total_sequence = len(sequences)
-for sequence in range(0, 100):
-    s = sequences[sequence][0]
-    value = sequences[sequence][1]
-    print(f"{sequence+1}/{total_sequence} Working on sequence {s} with target value {value} | ", end = "")
+# for sequence in range(0, total_sequence):
+#     s = sequences[sequence][0]
+#     value = sequences[sequence][1]
+#     print(f"{sequence+1}/{total_sequence} Working on sequence {s} with target value {value} | ", end = "")
+#     result = parse_sequence(s)
+#     total_matrices = len(result)
+#     print(f"Got {total_matrices}")
+#     if total_matrices != value:
+#         print("    Failed test.\n")
+#         break
+
+failed = []
+
+def per_sequence(idx):
+    s = sequences[idx][0]
+    value = sequences[idx][1]
+    start = time.perf_counter()
     result = parse_sequence(s)
+    end = time.perf_counter()
     total_matrices = len(result)
-    print(f"Got {total_matrices}")
+    elapsed_ms = (end - start) * 1000
+    print(f"{idx+1}/{total_sequence} n={len(s)} Sequence {s} with target value {value} | Got {total_matrices} | Time: {elapsed_ms:.3f} ms")
     if total_matrices != value:
         print("    Failed test.\n")
-        break
+        failed.append(f"{s} | {value} | {total_matrices}")
+    del result
+
+total_start = time.perf_counter()
+futures = []
+with ThreadPoolExecutor(max_workers=100) as executor:
+    futures = []
+    for i in range(0, total_sequence):
+        futures.append(executor.submit(per_sequence, i))
+    for future in as_completed(futures):
+        future.result()
+total_end = time.perf_counter()
+print(f"Took {total_end-total_start} seconds")
+
     
 
 
