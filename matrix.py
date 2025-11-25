@@ -1,63 +1,71 @@
+from typing import Iterable, List, TypeVar
 import networkx as nx
 import matplotlib.pyplot as plt
 import copy
 from itertools import combinations
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import math
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 import numpy as np
-import itertools
 import time
+from itertools import chain
+import gc
 
-MAX_WORKERS = 10
-OBJECT_WORKERS = 5
 
-def per_combo_worker(combo_state):
-    combo, state = combo_state
-    state = list(state)  # convert tuple to mutable list temporarily
-    for i in combo:
-        if state[i] <= 0:
-            return None
-        state[i] -= 1
-    return tuple(state)  # return as tuple for immutability and efficiency
+MAX_TOP_WORKERS = 20
+MAX_SUB_WORKERS = 5
 
-# Chatgpt
 def distribute_identical_objects(num_objects, buckets):
-    n = len(buckets)
-    results = []
+    """
+    Generate all valid distributions of `num_objects` identical objects into `buckets`,
+    where each bucket has an initial capacity given in `buckets`.
 
+    Returns a list of tuples representing remaining bucket states after distribution.
+    """
+    n = len(buckets)
     if num_objects > n:
         return []
 
-    buckets_tuple = tuple(buckets)  # immutable starting state
+    buckets_tuple = tuple(buckets)
+    results = []
 
-    # Lazy generator of arguments
-    def args_generator():
-        for combo in combinations(range(n), num_objects):
-            yield (combo, buckets_tuple)
+    for combo in combinations(range(n), num_objects):
+        # Check if all indices in combo have enough capacity
+        valid = True
+        for idx in combo:
+            if buckets_tuple[idx] <= 0:
+                valid = False
+                break
+        if not valid:
+            continue
 
-    with ThreadPoolExecutor(max_workers=OBJECT_WORKERS) as executor:
-        for r in executor.map(per_combo_worker, args_generator()):
-            if r is not None:
-                results.append(list(r))
+        # Apply decrement to a copy of the state
+        new_state = list(buckets_tuple)
+        for idx in combo:
+            new_state[idx] -= 1
+
+        results.append(list(new_state))
 
     return results
 
 # Chatgpt
-def remove_duplicates_recursive_gen_eq(data_gen: list["Matrix"], max_workers=4, min_chunk_size=100):
+T = TypeVar("Matrix")  # Generic type for items
+
+def remove_duplicates_recursive_gen_eq(
+    data_gen: Iterable[T],
+    min_chunk_size: int = 100
+) -> List[T]:
     """
     Recursively remove duplicates from a (possibly streaming) dataset
-    using equality (==) comparison and parallel processing.
+    using equality (==) comparison. Single-threaded for minimal overhead.
 
     Args:
-        data_gen (iterable or generator): Stream of objects.
-        max_workers (int): Number of parallel worker processes.
+        data_gen (iterable): Stream of objects.
         min_chunk_size (int): Smallest chunk size before recursion stops.
 
     Returns:
         list: Deduplicated list of unique objects.
     """
 
-    def dedup_sequential(seq):
+    def dedup_sequential(seq: List[T]) -> List[T]:
         """Sequential deduplication using == comparison."""
         unique = []
         for item in seq:
@@ -65,8 +73,8 @@ def remove_duplicates_recursive_gen_eq(data_gen: list["Matrix"], max_workers=4, 
                 unique.append(item)
         return unique
 
-    def recursive_dedup(seq):
-        """Recursive deduplication logic."""
+    def recursive_dedup(seq: List[T]) -> List[T]:
+        """Recursive deduplication logic for large sequences."""
         n = len(seq)
         if n <= min_chunk_size:
             return dedup_sequential(seq)
@@ -74,18 +82,14 @@ def remove_duplicates_recursive_gen_eq(data_gen: list["Matrix"], max_workers=4, 
         mid = n // 2
         left, right = seq[:mid], seq[mid:]
 
-        # Parallel recursion for left and right halves
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            left_future = executor.submit(recursive_dedup, left)
-            right_future = executor.submit(recursive_dedup, right)
-            left_unique = left_future.result()
-            right_unique = right_future.result()
+        # Recursively deduplicate left and right halves
+        left_unique = recursive_dedup(left)
+        right_unique = recursive_dedup(right)
 
         # Merge results and deduplicate again
-        merged = itertools.chain(left_unique, right_unique)
-        return dedup_sequential(list(merged))
+        return dedup_sequential(list(chain(left_unique, right_unique)))
 
-    def chunk_generator(gen, chunk_size):
+    def chunk_generator(gen: Iterable[T], chunk_size: int):
         """Yield successive chunks from a generator."""
         chunk = []
         for item in gen:
@@ -96,26 +100,12 @@ def remove_duplicates_recursive_gen_eq(data_gen: list["Matrix"], max_workers=4, 
         if chunk:
             yield chunk
 
-    # Split generator into top-level chunks
-    chunks = list(chunk_generator(data_gen, min_chunk_size * 4))
+    # Process top-level chunks sequentially
+    partials = [recursive_dedup(chunk) for chunk in chunk_generator(data_gen, min_chunk_size * 4)]
 
-    # Process each chunk recursively (possibly in parallel)
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        partials = list(executor.map(recursive_dedup, chunks))
-
-    # Merge and deduplicate final results
-    combined = itertools.chain.from_iterable(partials)
+    # Merge all chunks and deduplicate final results
+    combined = chain.from_iterable(partials)
     return dedup_sequential(list(combined))
-
-
-    # with ThreadPoolExecutor(max_workers=3) as executor:
-    # # Submit tasks to the thread pool
-    
-    # futures = [executor.submit(task, i) for i in range(5)]
-
-    # # Retrieve results as they complete
-    # for future in futures:
-    #     print(future.result())
 
 class Matrix():
     initial_sequence: list[int]
@@ -174,6 +164,8 @@ class Matrix():
 
         G1 = nx.from_numpy_array(np.array(a))
         G2 = nx.from_numpy_array(np.array(b))
+        del a
+        del b
 
         for i in range(len(self.initial_sequence)):
             G1.nodes[i]['weight'] = self.initial_sequence[i]
@@ -224,7 +216,6 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
         
         def parse_combo(combo):
             if test_graphical(matrix.iter, combo):
-                # print("    Is Graphical")
                 m = copy.deepcopy(matrix)
                 m.set_initial_sequence(matrix.initial_sequence)
                 m.set_zero_row(matrix.zero_row)
@@ -233,7 +224,7 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
                 out.append(m)
 
         futures = []
-        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        with ThreadPoolExecutor(max_workers=MAX_SUB_WORKERS) as executor:
             futures = []
             for row in range(0, len(combos)):
                 futures.append(executor.submit(parse_combo, combos[row]))
@@ -245,7 +236,7 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
         out: list[Matrix] = []
 
         futures = []
-        with ThreadPoolExecutor(max_workers=100) as executor:
+        with ThreadPoolExecutor(max_workers=MAX_TOP_WORKERS) as executor:
             futures = []
             for matrix in start:
                 futures.append(executor.submit(parse_row, matrix))
@@ -257,6 +248,7 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
 
     for x in start: # adding final zero row
         x.matrix.append(x.zero_row)
+    gc.collect()
     return start
 
 
@@ -290,11 +282,6 @@ def per_sequence(idx):
     total_matrices = len(result)
     elapsed_ms = (end - start) * 1000
     print(f"{idx+1}/{total_sequence} n={len(s)} Sequence {s} with target value {value} | Got {total_matrices} | Time: {elapsed_ms:.3f} ms")
-    # print("Broken Adjacency Matrix")
-    # print(result[0])
-    # print("")
-    # for x in result:
-    #     broken_adjacency_matrix.append(x)
     if total_matrices != value:
         print("    Failed test.\n")
         failed.append(f"{s} | {value} | {total_matrices}")
@@ -302,7 +289,7 @@ def per_sequence(idx):
 
 total_start = time.perf_counter()
 futures = []
-with ThreadPoolExecutor(max_workers=100) as executor:
+with ProcessPoolExecutor(max_workers=200) as executor:
     futures = []
     for i in range(0, total_sequence):
         futures.append(executor.submit(per_sequence, i))
@@ -310,6 +297,12 @@ with ThreadPoolExecutor(max_workers=100) as executor:
         future.result()
 total_end = time.perf_counter()
 print(f"Took {total_end-total_start} seconds")
+
+if len(failed) > 0:
+    for x in failed:
+        print(x)
+else:
+    print("No Sequences failed")
 
 # print("Solved adjacency Matrix")
 # print([0,1,1,1,0])
