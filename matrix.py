@@ -1,3 +1,4 @@
+import os
 from typing import Iterable, List, TypeVar
 import networkx as nx
 import matplotlib.pyplot as plt
@@ -255,7 +256,7 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
 import csv
 
 sequences = []
-data_lists = ["data/test_data_9.csv"]
+data_lists = ["data/test_data_10.csv"]
 #data_lists = ["data/test_data_example.csv"]
 for x in data_lists:
     with open(x, newline="") as f:
@@ -274,6 +275,12 @@ failed = []
 
 broken_adjacency_matrix = []
 
+set_size = 500
+start_index = 0
+end_index = start_index + set_size
+if end_index > total_sequence:
+    end_index = total_sequence
+
 def per_sequence(idx):
     s = sequences[idx][0]
     value = sequences[idx][1]
@@ -282,7 +289,7 @@ def per_sequence(idx):
     end = time.perf_counter()
     total_matrices = len(result)
     elapsed_ms = (end - start) * 1000
-    print(f"{idx+1}/{total_sequence} n={len(s)} Sequence {s} with target value {value} | Got {total_matrices} | Time: {elapsed_ms:.3f} ms")
+    print(f"{idx+1}/{end_index} n={len(s)} Sequence {s} with target value {value} | Got {total_matrices} | Time: {elapsed_ms:.3f} ms")
     if total_matrices != value:
         print("    Failed test.\n")
         failed.append(f"{s} | {value} | {total_matrices}")
@@ -290,9 +297,12 @@ def per_sequence(idx):
 
 total_start = time.perf_counter()
 futures = []
-with ProcessPoolExecutor(max_workers=200) as executor:
+
+
+
+with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
     futures = []
-    for i in range(0, total_sequence):
+    for i in range(start_index, end_index):
         futures.append(executor.submit(per_sequence, i))
     for future in as_completed(futures):
         future.result()
