@@ -1,11 +1,8 @@
 import os
 
-
-DATA_LIST = ["data/test_data_8.csv"] # 101.57 seconds
-DATA_LIST = ["data/test_data.csv"] # 3.56 seconds
-DATA_LIST = ["data/test_data_9_300.csv"] # 3.56 seconds
-
-
+DATA_LIST = ["data/test_data_8.csv"] # 53.73 seconds
+#DATA_LIST = ["data/test_data.csv"] #  1.47 seconds
+#DATA_LIST = ["data/test_data_9_300.csv"] # 241.9 seconds
 
 MAX_TOP_THREADS = 20
 MAX_SUB_THREADS = 5
