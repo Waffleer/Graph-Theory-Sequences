@@ -10,9 +10,13 @@ import time
 from itertools import chain
 import gc
 
+from config import DATA_LIST
+from config import MAX_TOP_THREADS
+from config import MAX_SUB_THREADS
+from config import MAX_PROCESS_THREADS
 
-MAX_TOP_WORKERS = 20
-MAX_SUB_WORKERS = 5
+MAX_TOP_WORKERS =  MAX_TOP_THREADS
+MAX_SUB_WORKERS = MAX_SUB_THREADS
 
 def distribute_identical_objects(num_objects, buckets):
     """
@@ -256,8 +260,7 @@ def parse_sequence(s: list[str]) -> list[list[int]]:
 import csv
 
 sequences = []
-data_lists = ["data/test_data_10.csv"]
-#data_lists = ["data/test_data_example.csv"]
+data_lists = DATA_LIST
 for x in data_lists:
     with open(x, newline="") as f:
         reader = csv.DictReader(f)
@@ -299,8 +302,7 @@ total_start = time.perf_counter()
 futures = []
 
 
-
-with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
+with ProcessPoolExecutor(max_workers=MAX_PROCESS_THREADS) as executor:
     futures = []
     for i in range(start_index, end_index):
         futures.append(executor.submit(per_sequence, i))
@@ -354,4 +356,3 @@ if len(failed) > 0:
 
 # plt.tight_layout() # Adjust layout to prevent overlap
 # plt.show()
-
